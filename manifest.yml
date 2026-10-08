@@ -8,8 +8,14 @@ inputs:
     default: ["production", "deploy-preview"]
   - name: siteLabel
     description: Name shown in messages. Defaults to the Netlify project name.
+  - name: channel
+    description: Slack channel to post to (needs a bot token; a webhook always posts to its own channel).
+    default: "#other-sites"
+  - name: tokenEnvVar
+    description: Env var holding the Slack bot token (xoxb-...) used with `channel`.
+    default: SLACK_BOT_TOKEN
   - name: webhookEnvVar
-    description: Env var holding the Slack incoming webhook URL.
+    description: Env var holding a Slack incoming webhook URL, used when no bot token is set.
     default: SLACK_WEBHOOK_URL
   - name: mentionOnFailure
     description: Text prepended to failure messages, e.g. "<!here>" or "<@U012345>".
