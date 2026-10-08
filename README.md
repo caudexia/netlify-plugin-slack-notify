@@ -6,6 +6,8 @@ During each build it adds [event-triggered functions](https://docs.netlify.com/b
 
 ## Add to a project
 
+The quickest way is to paste [`ADOPT_PROMPT.md`](ADOPT_PROMPT.md) into an AI coding agent opened in the site's repo. To do it by hand:
+
 1. Install it from GitHub:
 
    ```bash
