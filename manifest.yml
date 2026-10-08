@@ -1,0 +1,15 @@
+name: netlify-plugin-slack-notify
+inputs:
+  - name: events
+    description: Deploy events that post to Slack.
+    default: ["deploy-building", "deploy-succeeded", "deploy-failed"]
+  - name: contexts
+    description: Deploy contexts to report on (production, deploy-preview, branch-deploy).
+    default: ["production", "deploy-preview"]
+  - name: siteLabel
+    description: Name shown in messages. Defaults to the Netlify project name.
+  - name: webhookEnvVar
+    description: Env var holding the Slack incoming webhook URL.
+    default: SLACK_WEBHOOK_URL
+  - name: mentionOnFailure
+    description: Text prepended to failure messages, e.g. "<!here>" or "<@U012345>".
