@@ -54,6 +54,6 @@ Add Slack deploy notifications to this Netlify site using the shared build plugi
    - **Credentials:** a `SLACK_BOT_TOKEN` must be available to this site with the **Functions** scope. If it's already a team-level env var in Netlify, nothing is needed.
    - **Bot access:** invite the Slack bot to the channel (`/invite @<bot name>`), unless the app has the `chat:write.public` scope.
    - **Old notifications:** delete any Slack deploy notifications in the Netlify dashboard (Project configuration → Notifications), so messages aren't posted twice.
-   - **First message:** notifications start with the deploy after the first one that includes the plugin. Netlify runs these functions from the live deploy.
+   - **First messages:** "is live" messages start right away. "Started" (and probably "failed") messages begin once a production deploy that includes the plugin has been published.
 
 Don't change anything else in the project.
