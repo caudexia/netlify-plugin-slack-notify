@@ -17,6 +17,8 @@ export function resolveConfig(inputs = {}) {
     config: {
       contexts: asList(inputs.contexts),
       siteLabel: inputs.siteLabel || null,
+      channel: inputs.channel || '#other-sites',
+      tokenEnvVar: inputs.tokenEnvVar || 'SLACK_BOT_TOKEN',
       webhookEnvVar: inputs.webhookEnvVar || 'SLACK_WEBHOOK_URL',
       mentionOnFailure: inputs.mentionOnFailure || null,
     },

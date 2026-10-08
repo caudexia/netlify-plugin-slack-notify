@@ -134,3 +134,39 @@ test('mentions only on failure and escapes Slack control characters', () => {
   assert.doesNotMatch(ok.text, /<!here>/)
   assert.match(failed.attachments[0].blocks[0].text.text, /Fix &lt;script&gt; &amp; stuff/)
 })
+
+test('bot token posts to the configured channel, defaulting to #other-sites', async () => {
+  const calls = []
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, headers: init.headers, body: JSON.parse(init.body) })
+    return { ok: true, json: async () => ({ ok: true }) }
+  }
+  const env = { SLACK_BOT_TOKEN: 'xoxb-test', SLACK_WEBHOOK_URL: 'https://hooks.slack.test/x' }
+
+  await createHandler(resolveConfig({}).config, 'deploy-succeeded', { env, fetchImpl })({ body: classicBody() })
+  await createHandler(resolveConfig({ channel: '#ladybugarts' }).config, 'deploy-succeeded', { env, fetchImpl })({ body: classicBody() })
+
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].url, 'https://slack.com/api/chat.postMessage')
+  assert.equal(calls[0].headers.Authorization, 'Bearer xoxb-test')
+  assert.equal(calls[0].body.channel, '#other-sites')
+  assert.equal(calls[1].body.channel, '#ladybugarts')
+  assert.ok(calls[1].body.attachments[0].blocks[0].text.text.includes('is live'))
+})
+
+test('Slack API errors are logged, not thrown', async () => {
+  const errors = []
+  const original = console.error
+  console.error = (msg) => errors.push(msg)
+  try {
+    const handler = createHandler(resolveConfig({ channel: '#ladybugarts' }).config, 'deploy-failed', {
+      env: { SLACK_BOT_TOKEN: 'xoxb-test' },
+      fetchImpl: async () => ({ ok: true, json: async () => ({ ok: false, error: 'not_in_channel' }) }),
+    })
+    const res = await handler({ body: classicBody() })
+    assert.equal(res.statusCode, 200)
+    assert.match(errors[0], /#ladybugarts failed: not_in_channel/)
+  } finally {
+    console.error = original
+  }
+})

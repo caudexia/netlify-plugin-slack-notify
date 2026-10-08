@@ -1,6 +1,6 @@
 {
   "name": "netlify-plugin-slack-notify",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Netlify build plugin that adds event-triggered functions posting deploy start/success/failure to Slack.",
   "type": "module",
   "main": "src/index.js",

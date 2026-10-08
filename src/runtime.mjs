@@ -108,16 +108,32 @@ export function createHandler(config, event, { fetchImpl = globalThis.fetch, env
       return { statusCode: 200, body: `Skipped: context ${deploy.context}` }
     }
 
+    const message = buildMessage(event, deploy, config)
+    const tokenEnvVar = config.tokenEnvVar || 'SLACK_BOT_TOKEN'
+    const token = env[tokenEnvVar]
+
+    // A bot token can post to any channel; a webhook always posts to the one it was created for.
+    if (token) {
+      const res = await fetchImpl('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ channel: config.channel || '#other-sites', ...message }),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!result.ok) console.error(`[slack-notify] chat.postMessage to ${config.channel} failed: ${result.error || res.status}`)
+      return { statusCode: 200, body: 'OK' }
+    }
+
     const webhook = resolveWebhook(config, deploy.context, env)
     if (!webhook) {
-      console.warn(`[slack-notify] ${config.webhookEnvVar || 'SLACK_WEBHOOK_URL'} is not set; skipping ${event}`)
-      return { statusCode: 200, body: 'Skipped: no webhook' }
+      console.warn(`[slack-notify] Neither ${tokenEnvVar} nor ${config.webhookEnvVar || 'SLACK_WEBHOOK_URL'} is set; skipping ${event}`)
+      return { statusCode: 200, body: 'Skipped: no Slack credentials' }
     }
 
     const res = await fetchImpl(webhook, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildMessage(event, deploy, config)),
+      body: JSON.stringify(message),
     })
     if (!res.ok) console.error(`[slack-notify] Slack returned ${res.status}: ${await res.text()}`)
     return { statusCode: 200, body: 'OK' }
