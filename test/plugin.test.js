@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { test } from 'node:test'
 
-import { onBuild, resolveConfig } from '../src/index.js'
+import { resolveConfig } from '../src/config.js'
+import { onBuild } from '../src/index.js'
 import { buildMessage, createHandler, normalizeDeploy, resolveWebhook } from '../src/runtime.mjs'
 
 const DEFAULT_INPUTS = {
