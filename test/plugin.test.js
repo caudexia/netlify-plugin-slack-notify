@@ -94,7 +94,8 @@ test('generated function posts to Slack and skips other contexts', async () => {
   const res = await handler({ body: classicBody({ error_message: 'Build script returned non-zero exit code: 2' }) })
   assert.equal(res.statusCode, 200)
   assert.equal(calls.length, 1)
-  assert.match(calls[0].body.attachments[0].blocks[0].text.text, /production deploy failed[\s\S]*non-zero exit code/)
+  assert.match(calls[0].body.text, /production deploy failed/)
+  assert.match(calls[0].body.attachments[0].blocks[0].text.text, /non-zero exit code/)
 
   await handler({ body: classicBody({ context: 'branch-deploy' }) })
   assert.equal(calls.length, 1, 'branch deploys are not in the default contexts')
@@ -106,8 +107,10 @@ test('messages for deploy previews link the preview and PR', () => {
     review_id: 17,
     review_url: 'https://github.com/caudexia/ladybugarts/pull/17',
   })))
-  const text = buildMessage('deploy-succeeded', deploy, { siteLabel: 'Ladybug Arts' }).attachments[0].blocks[0].text.text
-  assert.match(text, /Ladybug Arts\*: deploy preview #17 is live/)
+  const message = buildMessage('deploy-succeeded', deploy, { siteLabel: 'Ladybug Arts' })
+  const text = message.attachments[0].blocks[0].text.text
+  assert.match(message.text, /Ladybug Arts\*: deploy preview #17 is live/)
+  assert.doesNotMatch(text, /is live/, 'headline is not repeated inside the attachment')
   assert.match(text, /<https:\/\/abc123--ladybugarts\.netlify\.app\|View preview>/)
   assert.match(text, /\|Pull request>/)
   assert.match(text, /\|Deploy log>/)
@@ -151,7 +154,7 @@ test('bot token posts to the configured channel, defaulting to #other-sites', as
   assert.equal(calls[0].headers.Authorization, 'Bearer xoxb-test')
   assert.equal(calls[0].body.channel, '#other-sites')
   assert.equal(calls[1].body.channel, '#ladybugarts')
-  assert.ok(calls[1].body.attachments[0].blocks[0].text.text.includes('is live'))
+  assert.ok(calls[1].body.text.includes('is live'))
 })
 
 test('Slack API errors are logged, not thrown', async () => {

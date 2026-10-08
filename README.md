@@ -64,7 +64,7 @@ If a project has its own function with the same name as an event (for example `n
 
 ## Caveats
 
-- **Notifications start after the first deploy that includes the plugin.** Netlify runs event functions from the deploy that is currently live. That first deploy publishes the functions but doesn't send notifications about itself.
+- **"Started" messages begin one deploy later.** A deploy reports its own success as soon as it includes the plugin. "Started" messages, and probably "failed" ones (a failed build never publishes its functions), are handled by the live production deploy. They begin once a production deploy that includes the plugin is published.
 - **Slack problems never fail anything.** With no credentials set, the functions log a warning and skip the post. Slack errors, such as `not_in_channel` when the bot hasn't been invited, appear in the function logs. Builds are never failed because of Slack.
 
 ## Development

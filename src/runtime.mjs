@@ -75,15 +75,18 @@ export function buildMessage(event, deploy, config = {}) {
   if (deploy.adminUrl && deploy.id) links.push(`<${deploy.adminUrl}/deploys/${deploy.id}|Deploy log>`)
   if (event === 'deploy-succeeded' && deploy.deployTime) links.push(`took ${deploy.deployTime}s`)
 
-  const lines = [mention + headline]
+  // The headline goes in `text` only; Slack shows it above the attachment, so
+  // repeating it inside the attachment would print it twice.
+  const lines = []
   if (details.length) lines.push(details.join(' · '))
   if (event === 'deploy-failed' && deploy.errorMessage) lines.push(`> ${escape(deploy.errorMessage)}`)
   if (links.length) lines.push(links.join(' · '))
-  const text = lines.join('\n')
 
   return {
-    text: mention + headline.replace(/[*]/g, ''),
-    attachments: [{ color: COLORS[event], blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] }],
+    text: mention + headline,
+    attachments: lines.length
+      ? [{ color: COLORS[event], blocks: [{ type: 'section', text: { type: 'mrkdwn', text: lines.join('\n') } }] }]
+      : [],
   }
 }
 
