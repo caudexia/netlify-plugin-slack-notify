@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { test } from 'node:test'
 
 import { resolveConfig } from '../src/config.js'
-import { onBuild } from '../src/index.js'
+import { onBuild, onPreBuild } from '../src/index.js'
 import { buildMessage, createHandler, normalizeDeploy, resolveWebhook } from '../src/runtime.mjs'
 
 const DEFAULT_INPUTS = {
@@ -33,7 +33,7 @@ const classicBody = (overrides = {}) =>
     },
   })
 
-async function fakeBuild(inputs, userFunctions = []) {
+async function fakeBuild(inputs, userFunctions = [], env = {}) {
   const root = await fs.mkdtemp(join(tmpdir(), 'slack-notify-test-'))
   const internal = join(root, '.netlify/functions-internal')
   await fs.mkdir(internal, { recursive: true })
@@ -54,7 +54,7 @@ async function fakeBuild(inputs, userFunctions = []) {
         },
       },
     },
-  })
+  }, { env })
   return { added, statuses }
 }
 
@@ -174,14 +174,16 @@ test('Slack API errors are logged, not thrown', async () => {
   }
 })
 
-test('a build skipped by the ignore command posts nothing', async () => {
+const recordingFetch = (calls) => async (url, init) => {
+  calls.push({ url, body: JSON.parse(init.body) })
+  return { ok: true, json: async () => ({ ok: true }) }
+}
+
+test('a build skipped by the ignore command posts one "skipped" message', async () => {
   const calls = []
-  const handler = createHandler(resolveConfig(DEFAULT_INPUTS).config, 'deploy-failed', {
+  const handler = createHandler(resolveConfig({ ...DEFAULT_INPUTS, mentionOnFailure: '<!here>' }).config, 'deploy-failed', {
     env: { SLACK_WEBHOOK_URL: 'https://hooks.slack.test/x' },
-    fetchImpl: async (url, init) => {
-      calls.push({ url, body: JSON.parse(init.body) })
-      return { ok: true }
-    },
+    fetchImpl: recordingFetch(calls),
   })
 
   // The body Netlify sent for an ignored production build (state "error").
@@ -192,6 +194,59 @@ test('a build skipped by the ignore command posts nothing', async () => {
     }),
   })
   assert.equal(res.statusCode, 200)
-  assert.match(res.body, /ignored/)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].body.text, ':fast_forward: *ladybugarts*: production deploy skipped, no content change')
+  const text = calls[0].body.attachments[0].blocks[0].text.text
+  assert.doesNotMatch(text, /Canceled build/, 'no failure quote')
+  assert.match(text, /\|Deploy log>/)
+})
+
+const BUILD_ENV = {
+  CONTEXT: 'production',
+  HEAD: 'main',
+  COMMIT_REF: '0123456789abcdef',
+  DEPLOY_ID: 'abc123',
+  SITE_NAME: 'ladybugarts',
+  REPOSITORY_URL: 'https://github.com/caudexia/ladybugarts',
+  SLACK_BOT_TOKEN: 'xoxb-test',
+}
+
+test('"started" is posted from the build when it has credentials', async () => {
+  const calls = []
+  await onPreBuild({ inputs: DEFAULT_INPUTS, constants: {} }, { env: BUILD_ENV, fetchImpl: recordingFetch(calls) })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].body.text, ':hammer_and_wrench: *ladybugarts*: production deploy started')
+  const text = calls[0].body.attachments[0].blocks[0].text.text
+  assert.match(text, /<https:\/\/github\.com\/caudexia\/ladybugarts\/commit\/0123456789abcdef\|0123456>/)
+  assert.match(text, /<https:\/\/app\.netlify\.com\/projects\/ladybugarts\/deploys\/abc123\|Deploy log>/)
+
+  // ...and the build then leaves out the deploy-building function.
+  const { added, statuses } = await fakeBuild(DEFAULT_INPUTS, [], BUILD_ENV)
+  assert.deepEqual(added.map((f) => f.split('/').pop()).sort(), ['deploy-failed.mjs', 'deploy-succeeded.mjs'])
+  assert.match(statuses[0].summary, /posted from the build/)
+})
+
+test('"started" is not posted from local builds, other contexts, or without credentials', async () => {
+  const calls = []
+  const fetchImpl = recordingFetch(calls)
+  await onPreBuild({ inputs: DEFAULT_INPUTS, constants: { IS_LOCAL: true } }, { env: BUILD_ENV, fetchImpl })
+  await onPreBuild({ inputs: DEFAULT_INPUTS, constants: {} }, { env: { ...BUILD_ENV, CONTEXT: 'branch-deploy' }, fetchImpl })
+  await onPreBuild({ inputs: { ...DEFAULT_INPUTS, events: ['deploy-failed'] }, constants: {} }, { env: BUILD_ENV, fetchImpl })
+  await onPreBuild({ inputs: DEFAULT_INPUTS, constants: {} }, { env: { ...BUILD_ENV, SLACK_BOT_TOKEN: '' }, fetchImpl })
   assert.equal(calls.length, 0)
+})
+
+test('a Slack outage during the build is logged, not thrown', async () => {
+  const errors = []
+  const original = console.error
+  console.error = (msg) => errors.push(msg)
+  try {
+    await onPreBuild({ inputs: DEFAULT_INPUTS, constants: {} }, {
+      env: BUILD_ENV,
+      fetchImpl: async () => { throw new Error('getaddrinfo ENOTFOUND slack.com') },
+    })
+    assert.match(errors[0], /ENOTFOUND/)
+  } finally {
+    console.error = original
+  }
 })

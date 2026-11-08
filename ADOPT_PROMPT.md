@@ -10,7 +10,7 @@ Add Slack deploy notifications to this Netlify site using the shared build plugi
 - Site label (name shown in Slack messages): `<SITE LABEL, e.g. "Ladybug Arts">`
 - Slack channel: `<#channel-name, or leave blank to use the default #other-sites>`
 
-**What the plugin does:** during each Netlify build it adds three event-triggered functions (`deploy-building`, `deploy-succeeded`, `deploy-failed`). They post to Slack when a production deploy or deploy preview starts, succeeds or fails. Read the plugin's README for all options before you start.
+**What the plugin does:** it posts to Slack when a production deploy or deploy preview starts, succeeds, fails or is skipped by the `ignore` command. "Started" is posted by the build itself; the rest come from event-triggered functions (`deploy-succeeded`, `deploy-failed`) the plugin adds during each build. Read the plugin's README for all options before you start.
 
 **Steps:**
 
@@ -33,7 +33,8 @@ Add Slack deploy notifications to this Netlify site using the shared build plugi
 
    ```toml
    # Slack deploy notifications (start / success / failure, production + deploy
-   # previews). Needs SLACK_BOT_TOKEN (or SLACK_WEBHOOK_URL) with the Functions scope — see
+   # previews). Needs SLACK_BOT_TOKEN (or SLACK_WEBHOOK_URL) with the Builds and
+   # Functions scopes — see
    # https://github.com/caudexia/netlify-plugin-slack-notify
    [[plugins]]
      package = "netlify-plugin-slack-notify"
@@ -48,12 +49,12 @@ Add Slack deploy notifications to this Netlify site using the shared build plugi
 
 6. **Verify.**
    - Run the project's normal build command and confirm it still passes.
-   - If you can, also run `npx netlify-cli build --offline`. Confirm the log contains `[slack-notify] Added deploy-building, deploy-succeeded, deploy-failed`, and that `.netlify/functions/` has a zip for each of those three functions.
+   - If you can, also run `npx netlify-cli build --offline`. Confirm the log contains `[slack-notify] Added deploy-building, deploy-succeeded, deploy-failed` (a local build without Slack credentials adds the `deploy-building` fallback too), and that `.netlify/functions/` has a zip for each of those three functions.
 
 7. **Commit** on a branch and open a pull request. Then remind me of these manual steps, which can't be done from code:
-   - **Credentials:** a `SLACK_BOT_TOKEN` must be available to this site with the **Functions** scope. If it's already a team-level env var in Netlify, nothing is needed.
+   - **Credentials:** a `SLACK_BOT_TOKEN` must be available to this site with the **Builds** and **Functions** scopes. If it's already a team-level env var in Netlify with both scopes, nothing is needed.
    - **Bot access:** invite the Slack bot to the channel (`/invite @<bot name>`), unless the app has the `chat:write.public` scope.
    - **Old notifications:** delete any Slack deploy notifications in the Netlify dashboard (Project configuration → Notifications), so messages aren't posted twice.
-   - **First messages:** "is live" messages start right away. "Started" (and probably "failed") messages begin once a production deploy that includes the plugin has been published.
+   - **First messages:** "started" and "is live" messages start right away. "Failed" and "skipped" messages probably begin once a production deploy that includes the plugin has been published.
 
 Don't change anything else in the project.
