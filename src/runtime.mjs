@@ -35,6 +35,12 @@ export function normalizeDeploy(body) {
   }
 }
 
+// A build the project's `ignore` command skipped reaches Netlify as a failed
+// deploy (state "error") whose message says so; nothing actually failed.
+export function isIgnoredBuild(deploy) {
+  return /Canceled build due to no content change/i.test(deploy.errorMessage || '')
+}
+
 function describeContext(deploy) {
   switch (deploy.context) {
     case 'production':
@@ -109,6 +115,10 @@ export function createHandler(config, event, { fetchImpl = globalThis.fetch, env
 
     if (config.contexts?.length && !config.contexts.includes(deploy.context)) {
       return { statusCode: 200, body: `Skipped: context ${deploy.context}` }
+    }
+
+    if (event === 'deploy-failed' && isIgnoredBuild(deploy)) {
+      return { statusCode: 200, body: 'Skipped: build ignored (no content change)' }
     }
 
     const message = buildMessage(event, deploy, config)

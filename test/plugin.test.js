@@ -173,3 +173,25 @@ test('Slack API errors are logged, not thrown', async () => {
     console.error = original
   }
 })
+
+test('a build skipped by the ignore command posts nothing', async () => {
+  const calls = []
+  const handler = createHandler(resolveConfig(DEFAULT_INPUTS).config, 'deploy-failed', {
+    env: { SLACK_WEBHOOK_URL: 'https://hooks.slack.test/x' },
+    fetchImpl: async (url, init) => {
+      calls.push({ url, body: JSON.parse(init.body) })
+      return { ok: true }
+    },
+  })
+
+  // The body Netlify sent for an ignored production build (state "error").
+  const res = await handler({
+    body: classicBody({
+      state: 'error',
+      error_message: "Failed during stage 'checking build content for changes': Canceled build due to no content change",
+    }),
+  })
+  assert.equal(res.statusCode, 200)
+  assert.match(res.body, /ignored/)
+  assert.equal(calls.length, 0)
+})
