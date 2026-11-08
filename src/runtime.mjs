@@ -7,6 +7,7 @@ const COLORS = {
   'deploy-building': '#F2C744',
   'deploy-succeeded': '#2EB67D',
   'deploy-failed': '#E01E5A',
+  'deploy-skipped': '#868686',
 }
 
 const escape = (text) =>
@@ -61,6 +62,7 @@ export function buildMessage(event, deploy, config = {}) {
     'deploy-building': `:hammer_and_wrench: *${escape(label)}*: ${what} started`,
     'deploy-succeeded': `:white_check_mark: *${escape(label)}*: ${what} is live`,
     'deploy-failed': `:x: *${escape(label)}*: ${what} failed`,
+    'deploy-skipped': `:fast_forward: *${escape(label)}*: ${what} skipped, no content change`,
   }[event]
   const mention = event === 'deploy-failed' && config.mentionOnFailure ? `${config.mentionOnFailure} ` : ''
 
@@ -103,6 +105,49 @@ export function resolveWebhook(config, context, env = process.env) {
   return (suffix && env[`${base}_${suffix}`]) || env[base] || null
 }
 
+// Whether Slack credentials for this context are present in `env`.
+export function hasCredentials(config, context, env = process.env) {
+  return Boolean(env[config.tokenEnvVar || 'SLACK_BOT_TOKEN'] || resolveWebhook(config, context, env))
+}
+
+// Posts `message`, preferring a bot token (any channel) over a webhook (its own
+// channel). Slack problems are logged, never thrown. Returns a short status.
+export async function postToSlack(config, context, message, { fetchImpl = globalThis.fetch, env = process.env, signal } = {}) {
+  const tokenEnvVar = config.tokenEnvVar || 'SLACK_BOT_TOKEN'
+  const token = env[tokenEnvVar]
+  try {
+    if (token) {
+      const res = await fetchImpl('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ channel: config.channel || '#other-sites', ...message }),
+        signal,
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!result.ok) console.error(`[slack-notify] chat.postMessage to ${config.channel} failed: ${result.error || res.status}`)
+      return 'OK'
+    }
+
+    const webhook = resolveWebhook(config, context, env)
+    if (!webhook) {
+      console.warn(`[slack-notify] Neither ${tokenEnvVar} nor ${config.webhookEnvVar || 'SLACK_WEBHOOK_URL'} is set; skipping`)
+      return 'Skipped: no Slack credentials'
+    }
+
+    const res = await fetchImpl(webhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message),
+      signal,
+    })
+    if (!res.ok) console.error(`[slack-notify] Slack returned ${res.status}: ${await res.text()}`)
+    return 'OK'
+  } catch (error) {
+    console.error(`[slack-notify] Posting to Slack failed: ${error.message}`)
+    return 'Error posting to Slack'
+  }
+}
+
 export function createHandler(config, event, { fetchImpl = globalThis.fetch, env = process.env } = {}) {
   return async (request) => {
     let body
@@ -117,38 +162,9 @@ export function createHandler(config, event, { fetchImpl = globalThis.fetch, env
       return { statusCode: 200, body: `Skipped: context ${deploy.context}` }
     }
 
-    if (event === 'deploy-failed' && isIgnoredBuild(deploy)) {
-      return { statusCode: 200, body: 'Skipped: build ignored (no content change)' }
-    }
-
-    const message = buildMessage(event, deploy, config)
-    const tokenEnvVar = config.tokenEnvVar || 'SLACK_BOT_TOKEN'
-    const token = env[tokenEnvVar]
-
-    // A bot token can post to any channel; a webhook always posts to the one it was created for.
-    if (token) {
-      const res = await fetchImpl('https://slack.com/api/chat.postMessage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ channel: config.channel || '#other-sites', ...message }),
-      })
-      const result = await res.json().catch(() => ({}))
-      if (!result.ok) console.error(`[slack-notify] chat.postMessage to ${config.channel} failed: ${result.error || res.status}`)
-      return { statusCode: 200, body: 'OK' }
-    }
-
-    const webhook = resolveWebhook(config, deploy.context, env)
-    if (!webhook) {
-      console.warn(`[slack-notify] Neither ${tokenEnvVar} nor ${config.webhookEnvVar || 'SLACK_WEBHOOK_URL'} is set; skipping ${event}`)
-      return { statusCode: 200, body: 'Skipped: no Slack credentials' }
-    }
-
-    const res = await fetchImpl(webhook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message),
-    })
-    if (!res.ok) console.error(`[slack-notify] Slack returned ${res.status}: ${await res.text()}`)
-    return { statusCode: 200, body: 'OK' }
+    // An ignored build gets one neutral "skipped" message instead of a failure.
+    const kind = event === 'deploy-failed' && isIgnoredBuild(deploy) ? 'deploy-skipped' : event
+    const status = await postToSlack(config, deploy.context, buildMessage(kind, deploy, config), { fetchImpl, env })
+    return { statusCode: 200, body: status }
   }
 }
