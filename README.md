@@ -65,6 +65,7 @@ If a project has its own function with the same name as an event (for example `n
 ## Caveats
 
 - **"Started" messages begin one deploy later.** A deploy reports its own success as soon as it includes the plugin. "Started" messages, and probably "failed" ones (a failed build never publishes its functions), are handled by the live production deploy. They begin once a production deploy that includes the plugin is published.
+- **Skipped builds stay quiet.** When a project's `ignore` command skips a build, Netlify records it as a failed deploy ("Canceled build due to no content change") and sends `deploy-failed`. The plugin posts nothing for these.
 - **Slack problems never fail anything.** With no credentials set, the functions log a warning and skip the post. Slack errors, such as `not_in_channel` when the bot hasn't been invited, appear in the function logs. Builds are never failed because of Slack.
 
 ## Development
